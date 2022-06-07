@@ -1,7 +1,7 @@
 
 # Deploy a high availability web app using AWS CloudFormation
 
-The 2nd project of Udacit Cloud DevOps Engineer nanodegree
+The 2nd project of Udacity Cloud DevOps Engineer nanodegree
 
 # Problem scenario
 Assuming a company is creating an Instagram clone called Udagram
