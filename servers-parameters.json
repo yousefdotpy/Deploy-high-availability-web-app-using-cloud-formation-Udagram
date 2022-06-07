@@ -1,0 +1,26 @@
+[
+    {
+        "ParameterKey": "EnvironmentName",
+        "ParameterValue": "YousefdotpyUdacityProject"
+    },
+    {
+        "ParameterKey": "WebServerAMI",
+        "ParameterValue": "ami-005de95e8ff495156"
+    },
+    {
+        "ParameterKey": "JbAMI",
+        "ParameterValue": "ami-0022f774911c1d690"
+    },
+    {
+        "ParameterKey": "JbKeypair",
+        "ParameterValue": "vockey"
+    },
+    {
+        "ParameterKey": "IP",
+        "ParameterValue": "0.0.0.0/0"
+    },
+    {
+        "ParameterKey": "WebServerInstance",
+        "ParameterValue": "t3.medium"
+    }
+]

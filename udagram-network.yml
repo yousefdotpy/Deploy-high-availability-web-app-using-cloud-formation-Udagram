@@ -1,0 +1,255 @@
+Description: >
+ Yousef Mahmoud (yousefdotpy) / egFWD
+ Using AWS CloudFormation to deploy a high avaialbilty web app >> Udagram
+ The network stack
+
+Parameters:
+
+##
+###  Network Parameters
+##
+
+  EnvironmentName:
+    Type: String
+    Description: The name of our project environment
+    
+  VpcCIDR:
+    Type: String
+    Description: The IP range "CIDR" for the main VPC
+    Default: 10.0.0.0/16
+  
+  PublicSubnet1CIDR:
+    Type: String
+    Description: The IP range "CIDR" for the public subnet in the first AZ
+    Default: 10.0.0.0/24
+
+  PublicSubnet2CIDR:
+    Type: String
+    Description: The IP range "CIDR" for the public subnet in the second AZ
+    Default: 10.0.1.0/24
+
+  PrivateSubnet1CIDR:
+    Type: String
+    Description: The IP range "CIDR" for the private subnet in the first AZ
+    Default: 10.0.2.0/24
+
+  PrivateSubnet2CIDR:
+    Type: String
+    Description: The IP range "CIDR" for the private subnet in the first AZ
+    Default: 10.0.3.0/24
+
+##
+###  Network Resources
+##
+
+Resources:
+
+# Our main VPC
+  VPCID:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsHostnames: true
+      CidrBlock: !Ref VpcCIDR
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} VPCID
+  
+# Our first public subnet
+  PublicSbnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref PublicSubnet1CIDR
+      VpcId: !Ref VPCID
+      AvailabilityZone: !Select [0,!GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Subnet 1
+      
+# Our second public subnet
+  PublicSbnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref PublicSubnet2CIDR
+      VpcId: !Ref VPCID
+      AvailabilityZone: !Select [2,!GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Subnet 2
+      
+# Our first private subnet
+  PrivateSbnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      VpcId: !Ref VPCID
+      AvailabilityZone: !Select [0,!GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Subnet 1
+
+# Our first private subnet
+  PrivateSbnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      VpcId: !Ref VPCID
+      AvailabilityZone: !Select [1,!GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Subnet 2
+
+# Our Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} IGateWAy
+
+# The Internet gateway attachement
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPCID
+      InternetGatewayId: !Ref InternetGateway
+
+# Our EIP for the first Nat Gateway
+  NGW1EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+# Our EIP for the scond Nat Gateway
+  NGW2EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+# The first Nat Gateway
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      SubnetId: !Ref PublicSbnet1
+      AllocationId: !GetAtt NGW1EIP.AllocationId
+
+# The second Nat Gateway
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      SubnetId: !Ref PublicSbnet2
+      AllocationId: !GetAtt NGW2EIP.AllocationId
+      
+# Our Public route table
+  PubRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCID
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Route
+    
+# Our Public route
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PubRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref  InternetGateway
+
+# The first public subnet route table association
+  PubSubnet1RTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PubRT
+      SubnetId: !Ref  PublicSbnet1
+
+# The second public subnet route table association
+  PubSubnet2RTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PubRT
+      SubnetId: !Ref  PublicSbnet2
+
+# The first private route table
+  PrivRT1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCID
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Priv RT1
+
+# The second private route table
+  PrivRT2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCID
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Priv RT2
+
+# The first Private route
+  PrivRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivRT1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+# The second Private route
+  PrivRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivRT2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+
+# The first private subnet route association
+  PrivSubnet1RTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSbnet1
+      RouteTableId: !Ref PrivRT1
+
+# The second private subnet route association
+  PrivSubnet2RTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSbnet2
+      RouteTableId: !Ref PrivRT2    
+
+# Our stack output
+
+
+Outputs:
+  VPC:
+    Description: A reference to the created VPC
+    Value: !Ref VPCID
+    Export:
+      Name: !Sub ${EnvironmentName}-VPCID
+
+  PUBSubnet1:
+    Description: Public Subnet 1
+    Value: !Ref PublicSbnet1
+    Export:
+      Name: !Sub ${EnvironmentName}-PUBSubnet1
+
+  PUBSubnet2:
+    Description: Public Subnet 2
+    Value: !Ref PublicSbnet2
+    Export:
+      Name: !Sub ${EnvironmentName}-PUBSubnet2
+
+  PRIVSubnets:
+    Description: Private Subnets
+    Value:
+      Fn::Join: [ ",", [ !Ref PrivateSbnet1, !Ref PrivateSbnet2 ]]
+    Export:
+      Name: !Sub ${EnvironmentName}-PRIVSubnets
+  
+## By : Yousefdotpy

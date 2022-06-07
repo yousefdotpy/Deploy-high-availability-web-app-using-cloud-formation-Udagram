@@ -1,0 +1,241 @@
+##
+###  Servers Parameters
+##
+
+Parameters:
+  EnvironmentName:
+    Description: Our Project Name
+    Type: String
+
+  WebServerAMI:
+    Description: The AMI of the web server "EC2" 
+    Type: AWS::EC2::Image::Id
+
+  WebServerInstance:
+    Description: The type of our web server instance
+    Type: String
+    
+  JbAMI:
+    Description: The AMI of the used Jumpbox
+    Type: AWS::EC2::Image::Id
+
+  JbKeypair:
+    Description: The Keypair of the used Jumpbox
+    Type: String
+
+  IP:
+    Description: My IP
+    Type: String
+ 
+##
+###  Servers Resources
+##
+
+Resources:
+# S3 Role for our instance
+  S3Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - s3.amazonaws.com
+            Action:
+             - "sts:AssumeRole"
+            
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+
+# Our Web server instance profile:
+  iamInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref S3Role
+
+# Our Jumpbox security group
+  JbSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: 
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
+
+      GroupDescription: Security group to the SSH servers
+
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+
+      SecurityGroupEgress:
+        - CidrIp: !Ref IP
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Jb SG
+
+# Our Web servers security group
+  WebServerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Web server security group that allow http
+      VpcId: 
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Webserver SG
+
+# Our LoadBalancer security group
+  LBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Load balancer security group that allows HTTP
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Load Balancer SG
+
+# Our jumpbox (Bastion Host)
+  JB:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: !Ref JbKeypair
+      ImageId: !Ref JbAMI
+      InstanceType: t2.micro
+      Monitoring: false
+      NetworkInterfaces:
+        - DeviceIndex: "0"
+          GroupSet:
+            - !Ref JbSG
+          SubnetId: 
+            Fn::ImportValue: !Sub ${EnvironmentName}-PUBSubnet1
+
+# Our server launch configration
+  WebServerLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      IamInstanceProfile: !Ref iamInstanceProfile
+      ImageId: !Ref WebServerAMI
+      InstanceType: !Ref  WebServerInstance
+      SecurityGroups:
+        - !Ref WebServerSG
+      BlockDeviceMappings:
+        - DeviceName: "/dev/sda1"
+          Ebs:
+            VolumeSize: 10
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install apache2 -y
+          systemctl start apache2.service
+          cd /var/www/html
+          echo " <h1> it works! Udagram, Udacity <h1> <br> <h2> yousefdotpy from the second project <h2> " > index.html
+
+# Our Target Group
+  LBTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 60
+      HealthCheckTimeoutSeconds: 30
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: 80
+      HealthCheckPath: /
+      UnhealthyThresholdCount: 5
+      Protocol: HTTP
+      Port: 80
+      VpcId: 
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
+      
+
+# The web server auto scaling group
+  WebServerASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchConfigurationName: !Ref WebServerLaunchConfig
+      MaxSize: 6
+      MinSize: 4
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PRIVSubnets
+      TargetGroupARNs:
+        - !Ref LBTG
+      Tags:
+        - Key: keyname
+          Value: !Sub ${EnvironmentName} AutoScalingGroup
+          PropagateAtLaunch: True
+
+# Our servers LoadBalancer
+  WebServerLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      SecurityGroups:
+        - !Ref LBSG
+      Subnets:
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PUBSubnet1
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PUBSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} LoadBalancer
+
+# LoadBalancer listener
+  LBL:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref WebServerLB
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref LBTG
+      Port: 80
+      Protocol: HTTP
+
+# The listener rule
+  LBLR:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref LBL
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref LBTG
+      Priority: 1
+      Conditions:
+        - Field: path-pattern
+          Values: [/]
+
+Outputs:
+ LoadBalancerURL:
+   Description: The Load Balancer URL
+   Value:
+     Fn::Join: [ "", [ "http://", !GetAtt WebServerLB.DNSName ] ]
