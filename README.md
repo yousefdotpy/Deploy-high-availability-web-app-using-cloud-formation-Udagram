@@ -8,6 +8,8 @@ Assuming a company is creating an Instagram clone called Udagram
 Developers wanted to deploy a new application to the AWS infrastructure.\
 My task was to create a high availability infrastructure and deploy it throug AWS using CloudFormation.
 
+## Projoct diagram
+![N|Solid](https://github.com/yousefdotpy/Deploy-high-availability-web-app-using-cloud-formation-Udagram/blob/main/Udagram.png?raw=true)
 
 ## Deployment
 
