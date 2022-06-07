@@ -45,6 +45,6 @@ $ aws cloudformation delete-stack --stack-name servers
 ```
 
 ## To view the website 
-Please click the link below\
+Please click the link below
 
 [Udagram](http://serve-webse-1trc2gm01d7m4-1482192828.us-east-1.elb.amazonaws.com/) `` Or`` http://serve-webse-1trc2gm01d7m4-1482192828.us-east-1.elb.amazonaws.com/
